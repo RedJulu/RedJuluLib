@@ -6,7 +6,6 @@ import de.redjulu.lib.MessageHelper;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.Bukkit;
-import org.bukkit.NamespacedKey;
 import org.bukkit.Sound;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -17,6 +16,7 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.scheduler.BukkitRunnable;
+import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -25,6 +25,10 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+/**
+ * Basis für registrierte Items mit fester ID (PDC), Kategorien, Cooldowns und Interaktions-Logik.
+ * Über {@link #getRegistry()} und {@link #getByCategory(String)} abfragbar.
+ */
 public abstract class GenericItem implements Listener {
 
     private static final Map<String, GenericItem> REGISTRY = new HashMap<>();
@@ -36,14 +40,19 @@ public abstract class GenericItem implements Listener {
 
     protected final String id;
     protected final String category;
-    protected final NamespacedKey key;
     protected final ItemStack itemStack;
 
-    public GenericItem(String id, String category, ItemBuilder builder) {
+    /**
+     * Registriert ein Generic-Item mit ID, Kategorie und vom {@link ItemBuilder} erzeugtem Item.
+     *
+     * @param id       Eindeutige ID (wird per PDC gespeichert).
+     * @param category Kategorie für {@link #getByCategory(String)}.
+     * @param builder  ItemBuilder; wird mit {@link ItemBuilder#setGenericId(String)} ergänzt und gebaut.
+     */
+    public GenericItem(@NotNull String id, @NotNull String category, @NotNull ItemBuilder builder) {
         this.id = id;
         this.category = category;
-        this.key = new NamespacedKey(RedJuluLib.getPlugin(), "generic_id");
-        this.itemStack = builder.pdc(key, PersistentDataType.STRING, id).build();
+        this.itemStack = builder.setGenericId(id).build();
         REGISTRY.put(id, this);
         if (!listenerRegistered) {
             Bukkit.getPluginManager().registerEvents(new GenericListener(), RedJuluLib.getPlugin());
@@ -51,32 +60,55 @@ public abstract class GenericItem implements Listener {
         }
     }
 
+    /** Wird bei Rechts-/Linksklick mit dem Item ausgelöst. */
     public void onInteract(PlayerInteractEvent event) {}
+
+    /** Wird bei Interaktion mit einer Entity mit dem Item ausgelöst. */
     public void onEntityInteract(PlayerInteractEntityEvent event) {}
 
-    public ItemStack getItem() {
+    /**
+     * Liefert eine Kopie des Standard-ItemStacks (ohne spielerspezifische Daten).
+     *
+     * @return Klon des ItemStacks.
+     */
+    public @NotNull ItemStack getItem() {
         return itemStack.clone();
     }
 
-    public static Map<String, GenericItem> getRegistry() {
+    /** Alle registrierten Generic-Items (ID → Instanz). */
+    public static @NotNull Map<String, GenericItem> getRegistry() {
         return REGISTRY;
     }
 
-    public static List<GenericItem> getByCategory(String category) {
+    /**
+     * Alle Generic-Items einer Kategorie (case-insensitive).
+     *
+     * @param category Kategorie-Name.
+     * @return Liste der Items.
+     */
+    public static @NotNull List<GenericItem> getByCategory(@NotNull String category) {
         return REGISTRY.values().stream()
                 .filter(item -> item.getCategory().equalsIgnoreCase(category))
                 .collect(Collectors.toList());
     }
 
-    public String getId() {
+    /** Eindeutige ID dieses Items. */
+    public @NotNull String getId() {
         return id;
     }
 
-    public String getCategory() {
+    /** Kategorie dieses Items. */
+    public @NotNull String getCategory() {
         return category;
     }
 
-    public void setCooldown(Player player, double seconds) {
+    /**
+     * Setzt einen Cooldown für diesen Spieler und dieses Item (Actionbar-Anzeige).
+     *
+     * @param player  Spieler.
+     * @param seconds Dauer in Sekunden.
+     */
+    public void setCooldown(@NotNull Player player, double seconds) {
         UUID uuid = player.getUniqueId();
         Map<String, Long> playerCooldowns = COOLDOWNS.computeIfAbsent(uuid, k -> new HashMap<>());
         long end = System.currentTimeMillis() + (long) (seconds * 1000L);
@@ -141,15 +173,21 @@ public abstract class GenericItem implements Listener {
         tasks.put(id, runnable.runTaskTimer(RedJuluLib.getPlugin(), 0, 2).getTaskId());
     }
 
-    public boolean hasCooldown(Player player) {
+    /**
+     * Prüft, ob für den Spieler bei diesem Item noch Cooldown aktiv ist.
+     *
+     * @param player Spieler.
+     * @return true wenn Cooldown aktiv.
+     */
+    public boolean hasCooldown(@NotNull Player player) {
         Map<String, Long> playerCooldowns = COOLDOWNS.get(player.getUniqueId());
         return playerCooldowns != null && playerCooldowns.containsKey(id) && System.currentTimeMillis() < playerCooldowns.get(id);
     }
 
-    private String getHeldId(Player player) {
+    private static String getHeldId(@NotNull Player player) {
         ItemStack item = player.getInventory().getItemInMainHand();
         if (item == null || !item.hasItemMeta()) return null;
-        return item.getItemMeta().getPersistentDataContainer().get(key, PersistentDataType.STRING);
+        return item.getItemMeta().getPersistentDataContainer().get(ItemBuilder.genericIdKey(), PersistentDataType.STRING);
     }
 
     private String getFullBar(String color) {
@@ -187,31 +225,27 @@ public abstract class GenericItem implements Listener {
         public void onInteract(PlayerInteractEvent e) {
             ItemStack item = e.getItem();
             if (item == null || !item.hasItemMeta()) return;
-            String id = item.getItemMeta().getPersistentDataContainer().get(new NamespacedKey(RedJuluLib.getPlugin(), "generic_id"), PersistentDataType.STRING);
-            if (id != null && REGISTRY.containsKey(id)) {
-                GenericItem generic = REGISTRY.get(id);
-                if (generic instanceof BoundItem) {
-                    NamespacedKey ownerKey = new NamespacedKey(RedJuluLib.getPlugin(), "bound_owner");
-                    if (!item.getItemMeta().getPersistentDataContainer().has(ownerKey, PersistentDataType.STRING)) {
-                        ItemMeta meta = item.getItemMeta();
-                        meta.getPersistentDataContainer().set(ownerKey, PersistentDataType.STRING, e.getPlayer().getUniqueId().toString());
-                        List<Component> lore = meta.hasLore() ? meta.lore() : new ArrayList<>();
-                        if (lore == null) lore = new ArrayList<>();
-                        lore.add(Component.empty());
-                        lore.add(MessageHelper.get("item.bound_to_lore", "player", e.getPlayer().getName()));
-                        meta.lore(lore);
-                        item.setItemMeta(meta);
-                        MessageHelper.send(e.getPlayer(), "system.item_bound_to_you");
-                        return;
-                    }
-                }
-                if (generic.hasCooldown(e.getPlayer())) {
-                    ERROR_BLINK.put(e.getPlayer().getUniqueId(), System.currentTimeMillis() + 400);
-                    MessageHelper.playError(e.getPlayer());
+            String id = item.getItemMeta().getPersistentDataContainer().get(ItemBuilder.genericIdKey(), PersistentDataType.STRING);
+            if (id == null || !REGISTRY.containsKey(id)) return;
+
+            GenericItem generic = REGISTRY.get(id);
+            if (generic instanceof BoundItem) {
+                if (!item.getItemMeta().getPersistentDataContainer().has(ItemBuilder.boundOwnerKey(), PersistentDataType.STRING)) {
+                    ItemStack bound = new ItemBuilder(item)
+                            .setBoundOwner(e.getPlayer().getUniqueId())
+                            .appendLore(Component.empty(), MessageHelper.get("item.bound_to_lore", "player", e.getPlayer().getName()))
+                            .build();
+                    e.getPlayer().getInventory().setItemInMainHand(bound);
+                    MessageHelper.send(e.getPlayer(), "system.item_bound_to_you");
                     return;
                 }
-                generic.onInteract(e);
             }
+            if (generic.hasCooldown(e.getPlayer())) {
+                ERROR_BLINK.put(e.getPlayer().getUniqueId(), System.currentTimeMillis() + 400);
+                MessageHelper.playError(e.getPlayer());
+                return;
+            }
+            generic.onInteract(e);
         }
     }
 }

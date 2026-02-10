@@ -1,0 +1,43 @@
+{
+  "title": "RedJuluLib Dokumentation",
+  "description": "Vollständige Dokumentation für die RedJuluLib - Eine moderne Bibliothek für Minecraft Paper/Spigot Plugins",
+  "author": "RedJulu",
+  "language": "de",
+  "gitbook": "3.2.3",
+  "root": "./",
+  "structure": {
+    "readme": "README.md",
+    "summary": "SUMMARY.md"
+  },
+  "plugins": [
+    "theme-default",
+    "highlight",
+    "sharing",
+    "fontsettings",
+    "livereload",
+    "search",
+    "lunr"
+  ],
+  "pluginsConfig": {
+    "theme-default": {
+      "showLevel": true
+    },
+    "sharing": {
+      "facebook": true,
+      "twitter": true,
+      "google": false,
+      "weibo": false,
+      "instapaper": false,
+      "vk": false,
+      "all": [
+        "facebook",
+        "twitter"
+      ]
+    },
+    "fontsettings": {
+      "theme": "white",
+      "family": "sans",
+      "size": 2
+    }
+  }
+}

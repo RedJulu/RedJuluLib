@@ -27,9 +27,15 @@ import java.util.function.Consumer;
 
 /**
  * Ultimativer ItemBuilder für Paper 1.21.1.
- * Unterstützt moderne Data Components, ItemModels und persistente Metadaten.
+ * Unterstützt moderne Data Components, ItemModels, persistente Metadaten,
+ * Generic-Items (ID), Bound-Items (Besitzer) und Lore-Anpassungen.
  */
 public class ItemBuilder {
+
+    /** PDC-Key für die Generic-Item-ID (z. B. in {@link de.redjulu.lib.item.GenericItem}). */
+    public static final String PDC_GENERIC_ID = "generic_id";
+    /** PDC-Key für den Besitzer eines Bound-Items (z. B. in {@link de.redjulu.lib.item.BoundItem}). */
+    public static final String PDC_BOUND_OWNER = "bound_owner";
 
     private final ItemStack itemStack;
     private final ItemMeta itemMeta;
@@ -119,6 +125,34 @@ public class ItemBuilder {
         itemMeta.lore(Arrays.stream(lore)
                 .map(line -> line.isEmpty() ? Component.empty() : mm.deserialize(line).decoration(TextDecoration.ITALIC, false))
                 .toList());
+        return this;
+    }
+
+    /**
+     * Hängt weitere Lore-Zeilen an die bestehende Lore an (MiniMessage).
+     * @param lines Zusätzliche Zeilen (MiniMessage); leere Strings werden als leere Component gesetzt.
+     * @return Der aktuelle Builder.
+     */
+    public ItemBuilder appendLore(@NotNull String... lines) {
+        List<Component> current = itemMeta.hasLore() && itemMeta.lore() != null ? new ArrayList<>(itemMeta.lore()) : new ArrayList<>();
+        for (String line : lines) {
+            current.add(line.isEmpty() ? Component.empty() : mm.deserialize(line).decoration(TextDecoration.ITALIC, false));
+        }
+        itemMeta.lore(current);
+        return this;
+    }
+
+    /**
+     * Hängt weitere Lore-Zeilen als Components an die bestehende Lore an.
+     * @param lines Zusätzliche Components (z. B. aus {@link de.redjulu.lib.MessageHelper#get}).
+     * @return Der aktuelle Builder.
+     */
+    public ItemBuilder appendLore(@NotNull Component... lines) {
+        List<Component> current = itemMeta.hasLore() && itemMeta.lore() != null ? new ArrayList<>(itemMeta.lore()) : new ArrayList<>();
+        for (Component line : lines) {
+            current.add(line == null ? Component.empty() : line.decoration(TextDecoration.ITALIC, false));
+        }
+        itemMeta.lore(current);
         return this;
     }
 
@@ -385,6 +419,49 @@ public class ItemBuilder {
     public <T, Z> ItemBuilder pdc(@NotNull NamespacedKey key, @NotNull PersistentDataType<T, Z> type, @NotNull Z value) {
         itemMeta.getPersistentDataContainer().set(key, type, value);
         return this;
+    }
+
+    /**
+     * Setzt die Generic-Item-ID (PDC). Wird von {@link de.redjulu.lib.item.GenericItem} verwendet.
+     * @param id Eindeutige ID des Generic-Items.
+     * @return Der aktuelle Builder.
+     */
+    public ItemBuilder setGenericId(@NotNull String id) {
+        return pdc(genericIdKey(), PersistentDataType.STRING, id);
+    }
+
+    /**
+     * Setzt den Besitzer eines Bound-Items (PDC). Wird von {@link de.redjulu.lib.item.BoundItem} verwendet.
+     * @param owner UUID des Besitzers.
+     * @return Der aktuelle Builder.
+     */
+    public ItemBuilder setBoundOwner(@NotNull UUID owner) {
+        return pdc(boundOwnerKey(), PersistentDataType.STRING, owner.toString());
+    }
+
+    /**
+     * Liefert den NamespacedKey für die Generic-Item-ID (einheitlich für Lese-Zugriffe).
+     * @return Key für PDC "generic_id".
+     */
+    public static @NotNull NamespacedKey genericIdKey() {
+        return new NamespacedKey(RedJuluLib.getPlugin(), PDC_GENERIC_ID);
+    }
+
+    /**
+     * Liefert den NamespacedKey für den Bound-Item-Besitzer (einheitlich für Lese-Zugriffe).
+     * @return Key für PDC "bound_owner".
+     */
+    public static @NotNull NamespacedKey boundOwnerKey() {
+        return new NamespacedKey(RedJuluLib.getPlugin(), PDC_BOUND_OWNER);
+    }
+
+    /**
+     * Erstellt einen Platzhalter-ItemStack (leerer Name, z. B. für GUI-Füller).
+     * @param material Das Material.
+     * @return Ein ItemBuilder mit leerem Anzeigenamen.
+     */
+    public static @NotNull ItemBuilder placeholder(@NotNull Material material) {
+        return new ItemBuilder(material).setName(Component.empty());
     }
 
     /**
