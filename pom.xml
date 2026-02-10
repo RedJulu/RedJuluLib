@@ -19,13 +19,14 @@
         <dependency>
             <groupId>io.papermc.paper</groupId>
             <artifactId>paper-api</artifactId>
-            <version>1.21.10-R0.1-SNAPSHOT</version>
+            <version>1.21.11-R0.1-SNAPSHOT</version>
             <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>com.mojang</groupId>
             <artifactId>brigadier</artifactId>
             <version>1.0.18</version>
+            <scope>provided</scope>
         </dependency>
     </dependencies>
 
@@ -36,5 +37,30 @@
         </repository>
     </repositories>
 
+    <distributionManagement>
+        <repository>
+            <id>redjulu-nexus</id>
+            <url>http://77.90.30.190:6008/repository/redjulu-lib/</url>
+        </repository>
+        <snapshotRepository>
+            <id>redjulu-nexus</id>
+            <url>http://77.90.30.190:6008/repository/redjulu-lib/</url>
+        </snapshotRepository>
+    </distributionManagement>
+
+    <build>
+        <defaultGoal>clean deploy</defaultGoal>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.13.0</version>
+                <configuration>
+                    <source>21</source>
+                    <target>21</target>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
 
 </project>

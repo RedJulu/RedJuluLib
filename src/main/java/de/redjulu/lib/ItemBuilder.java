@@ -26,7 +26,7 @@ import java.util.*;
 import java.util.function.Consumer;
 
 /**
- * Ultimativer ItemBuilder für Paper 1.21.1.
+ * Ultimativer ItemBuilder für Paper 1.21.11.
  * Unterstützt moderne Data Components, ItemModels, persistente Metadaten,
  * Generic-Items (ID), Bound-Items (Besitzer) und Lore-Anpassungen.
  */
