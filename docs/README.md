@@ -51,4 +51,4 @@ Bei Fragen oder Problemen, erstelle ein Issue auf GitHub.
 
 ## Lizenz
 
-Siehe [Lizenz](license.md) für Details.
+ARR

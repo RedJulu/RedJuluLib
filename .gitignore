@@ -36,3 +36,6 @@ build/
 
 ### Mac OS ###
 .DS_Store
+
+CHANGELOG.md
+GITBOOK_IMPORT.md
