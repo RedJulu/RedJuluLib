@@ -1,5 +1,6 @@
 package de.redjulu.lib.item;
 
+import de.redjulu.RedJuluLib;
 import de.redjulu.lib.ItemBuilder;
 import de.redjulu.lib.MessageHelper;
 import net.kyori.adventure.text.Component;
@@ -17,11 +18,7 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.persistence.PersistentDataType;
 import org.jetbrains.annotations.NotNull;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 
 /**
  * Generic-Item, das an einen Spieler gebunden ist: nur Besitzer kann es nutzen, aufheben, tragen, weitergeben.
