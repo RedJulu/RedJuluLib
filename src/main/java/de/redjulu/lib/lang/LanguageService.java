@@ -83,6 +83,38 @@ public class LanguageService {
     }
 
     /**
+     * Holt einen Text, entfernt alle vorhandenen Tags und forced ihn auf Rot + Durchgestrichen.
+     * @param key The language key.
+     * @return The rendered Component.
+     */
+    public Component getLocked(String key) {
+        String raw = getRaw(key);
+        if (raw.startsWith("<red>Missing Key")) return mm.deserialize(raw);
+
+        String stripped = raw.replaceAll("<[^>]*>", "");
+        return mm.deserialize("<red><strikethrough>" + stripped);
+    }
+
+    /**
+     * Holt eine Liste (Lore), entfernt alle Tags und forced jede Zeile auf Rot + Durchgestrichen.
+     * @param key Der Language Key.
+     * @return Eine Liste von Components für den ItemBuilder.
+     */
+    public List<Component> getLockedList(String key) {
+        Object raw = cache.get(key);
+        if (!(raw instanceof List<?> rawList)) {
+            return Collections.singletonList(getLocked(key));
+        }
+
+        List<Component> translated = new ArrayList<>();
+        for (Object line : rawList) {
+            String stripped = String.valueOf(line).replaceAll("<[^>]*>", "");
+            translated.add(mm.deserialize("<red><strikethrough>" + stripped));
+        }
+        return translated;
+    }
+
+    /**
      * Retrieves a list of translated components.
      *
      * @param key The language key.
@@ -133,7 +165,9 @@ public class LanguageService {
      * @return The raw string or the key itself if not found.
      */
     public String getRaw(String key) {
-        return String.valueOf(cache.getOrDefault(key, key));
+        Object val = cache.get(key);
+        if (val == null) return "<red>Missing Key: " + key;
+        return String.valueOf(val);
     }
 
     /**

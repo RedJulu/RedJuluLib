@@ -7,7 +7,7 @@
 
     <groupId>de.redjulu</groupId>
     <artifactId>RedJuluLib</artifactId>
-    <version>1.1-SNAPSHOT</version>
+    <version>1.2-SNAPSHOT</version>
 
     <properties>
         <maven.compiler.source>21</maven.compiler.source>
@@ -39,12 +39,12 @@
 
     <distributionManagement>
         <repository>
-            <id>redjulu-nexus</id>
-            <url>http://77.90.30.190:6008/repository/redjulu-lib/</url>
+            <id>redjulu</id>
+            <url>https://lib.redjulu.de/repository/redjulu-lib/</url>
         </repository>
         <snapshotRepository>
-            <id>redjulu-nexus</id>
-            <url>http://77.90.30.190:6008/repository/redjulu-lib/</url>
+            <id>redjulu</id>
+            <url>https://lib.redjulu.de/repository/redjulu-lib/</url>
         </snapshotRepository>
     </distributionManagement>
 
@@ -59,6 +59,19 @@
                     <source>21</source>
                     <target>21</target>
                 </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-source-plugin</artifactId>
+                <version>3.3.1</version>
+                <executions>
+                    <execution>
+                        <id>attach-sources</id>
+                        <goals>
+                            <goal>jar-no-fork</goal>
+                        </goals>
+                    </execution>
+                </executions>
             </plugin>
         </plugins>
     </build>
