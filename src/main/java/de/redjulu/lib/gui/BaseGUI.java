@@ -2,82 +2,60 @@ package de.redjulu.lib.gui;
 
 import de.redjulu.RedJuluLib;
 import de.redjulu.lib.ItemBuilder;
+import de.redjulu.lib.MessageHelper;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
+import org.bukkit.NamespacedKey;
 import org.bukkit.Sound;
+import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.entity.Player;
 import org.bukkit.event.inventory.ClickType;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemStack;
 import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
 import java.util.function.BiConsumer;
 import java.util.function.Predicate;
 
 /**
- * Basis für alle Custom-GUIs mit einheitlichem Layout, Pagination, Animation und History.
- * Diese Klasse verwaltet das Inventar-Handling, automatische Button-Registrierung und
- * bietet Schutzmechanismen für interaktive Slots.
+ * The core foundation for all Custom GUIs.
+ * Supports pagination, animation, history (back-button), and categories.
  *
- * @param <T> Datentyp der angezeigten Objekte in Listen.
- * @param <C> Enum-Typ für Kategorien oder Filter innerhalb der GUI.
+ * @param <T> The data type of the objects to be displayed.
+ * @param <C> The Enum type for categorization/filtering.
  */
 public abstract class BaseGUI<T, C extends Enum<C>> implements InventoryHolder {
 
-    /** Speichert die GUI-Historie pro Spieler für die Zurück-Navigation. */
     private static final Map<UUID, BaseGUI<?, ?>> HISTORY = new HashMap<>();
 
-    /** Das zugrunde liegende Bukkit-Inventar. */
     protected final Inventory inventory;
-    /** Die Gesamtgröße des Inventars. */
     protected final int size;
-    /** Liste der Slots, die für dynamischen Content (z.B. Items aus einer Liste) reserviert sind. */
     protected final List<Integer> contentSlots = new ArrayList<>();
-    /** Slots, in die der Spieler Items legen kann. */
-    protected final Set<Integer> interactableSlots = new HashSet<>();
-    /** Slots, aus denen der Spieler Items entnehmen kann, ohne dass die Interaktion blockiert wird. */
-    protected final Set<Integer> placeholder = new HashSet<>();
-    /** Slots, die beim Shift-Klick bevorzugt behandelt werden. */
-    protected final Set<Integer> prioritySlots = new HashSet<>();
-    /** Slots, die bei einem Update nicht geleert werden (verhindert Head-Flackern). */
-    protected final Set<Integer> ignoredSlots = new HashSet<>();
-    /** Snapshots der ursprünglichen Items in interaktiven Slots zur Wiederherstellung (Placeholder-System). */
-    protected final Map<Integer, ItemStack> slotPlaceholders = new HashMap<>();
-    /** Speichert Frames für animierte Slots. */
     protected final Map<Integer, List<ItemStack>> animatedSlots = new HashMap<>();
-
-    /** Speichert Items, die der Spieler in interaktive Slots gelegt hat, um sie über Updates hinweg zu erhalten. */
     protected final Map<Integer, ItemStack> activeItems = new HashMap<>();
+    protected final Set<Integer> interactableSlots = new HashSet<>();
+    protected final Set<Integer> ignoredSlots = new HashSet<>();
+    protected final Set<Integer> placeholderSlots = new HashSet<>();
+    protected final Set<Integer> prioritySlots = new HashSet<>();
+    protected final Map<Integer, ItemStack> placeholderItems = new HashMap<>();
+    private final List<DynamicButtonInfo> dynamicButtons = new ArrayList<>();
 
-    /** Sound, der beim Öffnen der GUI abgespielt wird. */
     protected Sound openSound = Sound.BLOCK_CHEST_OPEN;
-    /** Sound, der bei jedem Button-Klick abgespielt wird. */
     protected Sound clickSound = Sound.UI_BUTTON_CLICK;
-    /** Sound, der bei der Nutzung der back-Funktion abgespielt wird. */
     protected Sound backSound = Sound.ITEM_ARMOR_EQUIP_GENERIC;
 
-    /** Liste aller verfügbaren Daten-Objekte für diese GUI. */
     protected List<T> allItems = new ArrayList<>();
-    /** Die aktuell aktive Kategorie/Filterung. */
     protected C currentCategory;
-    /** Die aktuelle Seite der Pagination (0-basiert). */
     protected int page = 0;
-    /** Anzahl der maximalen Elemente pro Seite im Content-Bereich. */
     protected final int pageSize;
 
-    /**
-     * Erstellt eine neue GUI-Instanz.
-     *
-     * @param rows            Anzahl der Reihen (1-6).
-     * @param titleKey        Sprach-Key aus der RedJuluLib oder ein MiniMessage-String.
-     * @param t, b, l, r      Padding für den Content-Bereich (Top, Bottom, Left, Right).
-     * @param defaultCategory Die initial gewählte Kategorie.
-     */
+    private boolean switching = false;
+    private boolean dialogOpen = false;
+
     public BaseGUI(int rows, String titleKey, int t, int b, int l, int r, C defaultCategory) {
         this.size = rows * 9;
         this.currentCategory = defaultCategory;
@@ -97,21 +75,21 @@ public abstract class BaseGUI<T, C extends Enum<C>> implements InventoryHolder {
     }
 
     /**
-     * Löscht die GUI-History für einen Spieler (z. B. beim Logout).
-     *
-     * @param uuid UUID des Spielers.
+     * Clears the GUI history for a player.
+     * @param uuid Player's UUID.
      */
     public static void clearHistory(UUID uuid) {
         HISTORY.remove(uuid);
     }
 
     /**
-     * Öffnet die GUI für einen Spieler und triggert {@link #update(Player)}.
-     *
-     * @param player        Ziel-Spieler.
-     * @param saveToHistory Wenn true, wird die aktuelle GUI des Spielers in der History gespeichert.
+     * Opens the GUI for a player.
+     * @param player Target player.
+     * @param saveToHistory Whether to store previous GUI.
      */
     public void open(Player player, boolean saveToHistory) {
+        switching = false;
+        dialogOpen = false;
         if (saveToHistory) {
             InventoryHolder holder = player.getOpenInventory().getTopInventory().getHolder();
             if (holder instanceof BaseGUI<?, ?> current) {
@@ -119,57 +97,203 @@ public abstract class BaseGUI<T, C extends Enum<C>> implements InventoryHolder {
             }
         }
         update(player);
-        player.openInventory(inventory);
-        if (openSound != null) player.playSound(player.getLocation(), openSound, 0.5f, 1.0f);
+        if (!player.getOpenInventory().getTopInventory().equals(inventory)) {
+            player.openInventory(inventory);
+            if (openSound != null) player.playSound(player.getLocation(), openSound, 0.5f, 1.0f);
+        }
     }
 
     /**
-     * Baut den GUI-Inhalt neu auf (löscht Buttons, Animationen und triggert {@link #compose(Player)}).
-     * Stellt zudem gespeicherte Spieler-Items aus activeItems wieder her.
-     *
-     * @param player Ziel-Spieler (für kontextabhängige Inhalte).
+     * Rebuilds the GUI content.
+     * @param player Target player.
      */
     public void update(Player player) {
+        if(dialogOpen) return;
+
         GUIListener.clearButtons(inventory);
-
-        for (int i = 0; i < size; i++) {
-            if (!ignoredSlots.contains(i)) {
-                inventory.setItem(i, null);
-            }
-        }
-
         animatedSlots.clear();
         interactableSlots.clear();
-        placeholder.clear();
+        placeholderSlots.clear();
         prioritySlots.clear();
-        slotPlaceholders.clear();
+        placeholderItems.clear();
         ignoredSlots.clear();
-
+        dynamicButtons.clear();
         compose(player);
-
-        activeItems.forEach((slot, item) -> {
-            if (item != null && item.getType() != Material.AIR) {
-                inventory.setItem(slot, item);
-            }
-        });
-
         tickAnimations(0);
     }
 
     /**
-     * Führt ein Update im nächsten Server-Tick aus. Verhindert Probleme bei Inventar-Änderungen während Events.
-     *
-     * @param player Ziel-Spieler.
+     * Re-applies dynamic button display (e.g. after placeholder slot content changed). Call from listener.
      */
-    protected void updateDelayed(Player player) {
-        Bukkit.getScheduler().runTask(RedJuluLib.getPlugin(), () -> update(player));
+    public void updateDynamicButtons(Player player) {
+        for (DynamicButtonInfo info : dynamicButtons) {
+            inventory.setItem(info.slot, info.condition.test(player) ? info.activeItem : info.inactiveItem);
+        }
+    }
+
+    private record DynamicButtonInfo(int slot, Predicate<Player> condition, ItemStack activeItem, ItemStack inactiveItem) {}
+
+    /**
+     * Marks a slot as interactable (e.g. for item input); clicks are not cancelled for these slots.
+     */
+    protected void setInteractable(int slot, boolean interactable) {
+        if (interactable) interactableSlots.add(slot);
+        else interactableSlots.remove(slot);
     }
 
     /**
-     * Wechselt die aktuelle Kategorie, setzt die Seite auf 0 und aktualisiert die GUI.
-     *
-     * @param player   Ziel-Spieler.
-     * @param category Neue Kategorie.
+     * Marks a slot to be skipped when using fillBackground with skipIgnoredSlots.
+     */
+    protected void setIgnored(int slot) {
+        ignoredSlots.add(slot);
+    }
+
+    /**
+     * Marks a slot as placeholder and sets the display item. Placeholder can't be taken;
+     * placing an item replaces it, taking the item restores the placeholder.
+     */
+    protected void setPlaceholder(int slot) {
+        ItemStack current = inventory.getItem(slot);
+
+        if (current == null || current.getType() == Material.AIR) return;
+
+        ItemStack marked = markAsPlaceholderItem(current);
+        inventory.setItem(slot, marked);
+
+        placeholderSlots.add(slot);
+        placeholderItems.put(slot, marked.clone());
+    }
+
+
+    /**
+     * Registers a slot as placeholder (so taking the item out restores the placeholder) without setting the display.
+     * Use when the slot sometimes shows a user item; call this first, then set the slot to item or to getPlaceholderForSlot(slot).
+     */
+    protected void registerPlaceholderSlot(int slot, @NotNull ItemStack placeholderItem) {
+        ItemStack marked = markAsPlaceholderItem(placeholderItem);
+        placeholderSlots.add(slot);
+        placeholderItems.put(slot, marked.clone());
+    }
+
+    private ItemStack markAsPlaceholderItem(ItemStack placeholderItem) {
+        ItemStack marked = placeholderItem.clone();
+        var meta = marked.getItemMeta();
+        if (meta != null) {
+            meta.getPersistentDataContainer().set(placeholderKey(), PersistentDataType.BYTE, (byte) 1);
+            marked.setItemMeta(meta);
+        }
+        return marked;
+    }
+
+    /**
+     * Gives this placeholder slot priority when shift-clicking (e.g. item goes here first).
+     */
+    protected void setPriority(int slot) {
+        prioritySlots.add(slot);
+    }
+
+    private static NamespacedKey placeholderKey() {
+        return new NamespacedKey(RedJuluLib.getPlugin(), "gui_placeholder");
+    }
+
+    /**
+     * Returns true if the item is a GUI placeholder (background).
+     */
+    public static boolean isPlaceholderItem(ItemStack item) {
+        if (item == null || !item.hasItemMeta()) return false;
+        return item.getItemMeta().getPersistentDataContainer().has(placeholderKey(), PersistentDataType.BYTE);
+    }
+
+    /**
+     * Returns the stored placeholder item for a slot (to restore when user takes their item out).
+     */
+    public ItemStack getPlaceholderForSlot(int slot) {
+        return placeholderItems.get(slot);
+    }
+
+    /**
+     * Returns whether the slot has shift priority.
+     */
+    public boolean isPrioritySlot(int slot) {
+        return prioritySlots.contains(slot);
+    }
+
+    /**
+     * Set true before opening a menu (e.g. AnvilInput) so onClose does not return items to the player.
+     */
+    protected void setSwitching(boolean switching) {
+        this.switching = switching;
+    }
+
+    /**
+     * Whether the GUI is currently switching to another menu (items will not be returned on close).
+     */
+    public boolean isSwitching() {
+        return switching;
+    }
+
+    /**
+     * Setzt, ob gerade ein Paper-Dialog offen ist, um Schließen-Logik zu unterdrücken.
+     */
+    public void setDialogOpen(boolean open) {
+        this.dialogOpen = open;
+    }
+
+    public boolean isDialogOpen() {
+        return dialogOpen;
+    }
+
+    /**
+     * Sets an item in a slot without registering a click action.
+     */
+    protected void setButton(int slot, ItemStack item) {
+        inventory.setItem(slot, item);
+    }
+
+    /**
+     * Clears the stored active item for a slot (e.g. when user takes item out of placeholder slot so placeholder shows again).
+     */
+    protected void clearActiveItem(int slot) {
+        activeItems.remove(slot);
+    }
+
+    /**
+     * Returns the active/custom item for a slot. For placeholder slots: inventory first, then activeItems (e.g. after anvil).
+     */
+    protected ItemStack getActiveItem(int slot) {
+        if (placeholderSlots.contains(slot)) {
+            ItemStack in = inventory.getItem(slot);
+            if (in != null && in.getType() != Material.AIR && !isPlaceholderItem(in)) return in;
+            return activeItems.get(slot);
+        }
+        if (interactableSlots.contains(slot)) {
+            ItemStack in = inventory.getItem(slot);
+            if (in != null && in.getType() != Material.AIR) return in;
+        }
+        return activeItems.get(slot);
+    }
+
+    /**
+     * Registers a button that shows different items based on a condition and runs the same action.
+     * @param player The player for whom the GUI is composed (used to evaluate the condition).
+     */
+    protected void setDynamicButton(Player player, int slot, Predicate<Player> condition, ItemStack activeItem, ItemStack inactiveItem, BiConsumer<Player, ClickType> action) {
+        dynamicButtons.add(new DynamicButtonInfo(slot, condition, activeItem, inactiveItem));
+        inventory.setItem(slot, condition.test(player) ? activeItem : inactiveItem);
+        GUIListener.registerButton(inventory, slot, (p, click) -> {
+            if (!condition.test(p)) {
+                MessageHelper.playError(p);
+                return;
+            }
+            if (clickSound != null) p.playSound(p.getLocation(), clickSound, 0.5f, 1.0f);
+            action.accept(p, click);
+        });
+    }
+
+    /**
+     * Switches the current category, resets page and updates.
+     * @param player Target player.
+     * @param category The new category.
      */
     public void setCategory(Player player, C category) {
         this.currentCategory = category;
@@ -178,9 +302,8 @@ public abstract class BaseGUI<T, C extends Enum<C>> implements InventoryHolder {
     }
 
     /**
-     * Öffnet das zuvor gespeicherte GUI (History) oder schließt das Inventar, falls keine History existiert.
-     *
-     * @param player Ziel-Spieler.
+     * Returns to the previous GUI.
+     * @param player Target player.
      */
     protected void back(Player player) {
         BaseGUI<?, ?> last = HISTORY.remove(player.getUniqueId());
@@ -193,40 +316,13 @@ public abstract class BaseGUI<T, C extends Enum<C>> implements InventoryHolder {
     }
 
     /**
-     * Registriert einen statischen Button ohne Klick-Aktion, aber mit Klick-Sound.
-     *
-     * @param slot Inventar-Slot.
-     * @param item Anzuzeigender ItemStack.
-     */
-    protected void setButton(int slot, ItemStack item) {
-        setButton(slot, item, (p, c) -> {});
-    }
-
-    /**
-     * Registriert einen interaktiven Button.
-     *
-     * @param slot   Inventar-Slot.
-     * @param item   Anzuzeigender ItemStack.
-     * @param action Funktion, die beim Klick ausgeführt wird (Player, ClickType).
+     * Registers a button in the GUI.
+     * @param slot Target slot.
+     * @param item ItemStack.
+     * @param action Click logic.
      */
     protected void setButton(int slot, ItemStack item, BiConsumer<Player, ClickType> action) {
-        ItemStack current = inventory.getItem(slot);
-
-        boolean shouldSet = true;
-        if (current != null && current.getType() != Material.AIR) {
-            if (ignoredSlots.contains(slot)) {
-                if (current.getType() == item.getType()) {
-                    shouldSet = false;
-                }
-            } else if (current.isSimilar(item)) {
-                shouldSet = false;
-            }
-        }
-
-        if (shouldSet) {
-            inventory.setItem(slot, item);
-        }
-
+        inventory.setItem(slot, item);
         GUIListener.registerButton(inventory, slot, (p, click) -> {
             if (clickSound != null) p.playSound(p.getLocation(), clickSound, 0.5f, 1.0f);
             action.accept(p, click);
@@ -234,210 +330,8 @@ public abstract class BaseGUI<T, C extends Enum<C>> implements InventoryHolder {
     }
 
     /**
-     * Registriert einen Button, der seinen Zustand basierend auf einer Bedingung ändert.
-     *
-     * @param slot      Inventar-Slot.
-     * @param condition Bedingung, ob der Button aktiv ist.
-     * @param active    Item, wenn Bedingung erfüllt.
-     * @param inactive  Item, wenn Bedingung nicht erfüllt.
-     * @param action    Aktion bei Klick (wird nur ausgeführt, wenn Bedingung erfüllt).
-     */
-    protected void setDynamicButton(int slot, Predicate<Player> condition, ItemStack active, ItemStack inactive, BiConsumer<Player, ClickType> action) {
-        Player viewer = inventory.getViewers().isEmpty() ? null : (Player) inventory.getViewers().get(0);
-        boolean met = viewer != null && condition.test(viewer);
-
-        setButton(slot, met ? active : inactive, (p, click) -> {
-            if (condition.test(p)) {
-                action.accept(p, click);
-            } else {
-                p.playSound(p.getLocation(), Sound.ENTITY_VILLAGER_NO, 0.5f, 1.0f);
-            }
-        });
-    }
-
-    /**
-     * Registriert statische Buttons für mehrere Slots gleichzeitig.
-     *
-     * @param slots Liste der Slots.
-     * @param item  Anzuzeigender ItemStack.
-     */
-    protected void setButtons(Iterable<Integer> slots, ItemStack item) {
-        setButtons(slots, item, (p, c) -> {});
-    }
-
-    /**
-     * Registriert funktionale Buttons für mehrere Slots gleichzeitig.
-     *
-     * @param slots  Liste der Slots.
-     * @param item   Anzuzeigender ItemStack.
-     * @param action Gemeinsame Klick-Aktion.
-     */
-    protected void setButtons(Iterable<Integer> slots, ItemStack item, BiConsumer<Player, ClickType> action) {
-        for (int slot : slots) setButton(slot, item, action);
-    }
-
-    /**
-     * Markiert einen Slot als interaktionsfähig. Platzhalter werden automatisch durch
-     * das Einlegen eines Items ersetzt und beim Entfernen wiederhergestellt.
-     * Erstellt einen Klon des aktuellen Items im Slot als permanenten Platzhalter.
-     *
-     * @param slot         Der Ziel-Slot.
-     * @param interactable true, wenn Interaktion aktiviert werden soll.
-     */
-    protected void setInteractable(int slot, @Nullable Boolean interactable) {
-        if (interactable == null) interactable = true;
-        if (interactable) {
-            interactableSlots.add(slot);
-        } else {
-            interactableSlots.remove(slot);
-        }
-    }
-
-    /**
-     * Markiert mehrere Slots als interaktionsfähig.
-     *
-     * @param slots        Die Slots.
-     * @param interactable true für Aktivierung.
-     */
-    protected void setInteractable(Iterable<Integer> slots, @Nullable Boolean interactable) {
-        if (interactable == null) interactable = true;
-        for (int slot : slots) setInteractable(slot, interactable);
-    }
-
-    /**
-     * Markiert einen Slot als Placeholder.
-     *
-     * @param slot        Der Ziel-Slot.
-     * @param isPlaceholder true für Aktivierung.
-     */
-    protected void setPlaceholder(int slot, boolean isPlaceholder) {
-        if(!isInteractableSlot(slot)) setInteractable(slot, true);
-        if(!isPrioritySlot(slot)) setPriority(slot, true);
-
-        if (isPlaceholder) {
-            this.placeholder.add(slot);
-            if (!activeItems.containsKey(slot)) {
-                ItemStack current = inventory.getItem(slot);
-                if (current != null && current.getType() != Material.AIR) {
-                    slotPlaceholders.putIfAbsent(slot, current.clone());
-                }
-            }
-
-            ItemStack itemInInv = inventory.getItem(slot);
-            if (itemInInv == null || itemInInv.getType() == Material.AIR) {
-                ItemStack ph = slotPlaceholders.get(slot);
-                if (ph != null) inventory.setItem(slot, ph);
-            }
-        } else {
-            this.placeholder.remove(slot);
-            slotPlaceholders.remove(slot);
-        }
-    }
-
-    /**
-     * Markiert einen Slot als Placeholder.
-     *
-     * @param slot        Der Ziel-Slot.
-     */
-    protected void setPlaceholder(int slot) {
-        setPlaceholder(slot, true);
-    }
-
-    /**
-     * Markiert mehrere Slots als placeholder.
-     *
-     * @param slots   Die Slots.
-     * @param placeholder true für Aktivierung.
-     */
-    protected void setPlaceholders(Iterable<Integer> slots, boolean placeholder) {
-        slots.forEach(slot -> {
-            if (!isInteractableSlot(slot)) setInteractable(slot, true);
-            if (!isPrioritySlot(slot)) setPriority(slot, true);
-        });
-        for (int slot : slots) setPlaceholder(slot, placeholder);
-    }
-
-    /**
-     * Markiert mehrere Slots als placeholder.
-     *
-     * @param slots   Die Slots.
-     */
-    protected void setPlaceholders(Iterable<Integer> slots) {
-        slots.forEach(slot -> {
-            if (!isInteractableSlot(slot)) setInteractable(slot, true);
-            if (!isPrioritySlot(slot)) setPriority(slot, true);
-        });
-        for (int slot : slots) setPlaceholder(slot);
-    }
-
-    /**
-     * Markiert einen Slot als Prioritätsslot für Shift-Klicks.
-     *
-     * @param slot     Der Slot.
-     * @param priority true für hohe Priorität.
-     */
-    protected void setPriority(int slot, boolean priority) {
-        if (priority) prioritySlots.add(slot);
-        else prioritySlots.remove(slot);
-    }
-
-    /**
-     * Markiert einen Slot als ignoriert für Clear-Vorgänge (verhindert Flackern).
-     *
-     * @param slot Der Slot.
-     */
-    protected void setIgnored(int slot) {
-        ignoredSlots.add(slot);
-    }
-
-    /**
-     * Wird aufgerufen, wenn sich der Inhalt eines interaktiven Slots ändert.
-     * Verwaltet automatisch die activeItems Map basierend auf Platzhaltern.
-     *
-     * @param player Der handelnde Spieler.
-     * @param slot   Der betroffene Slot.
-     * @param item   Das neue Item im Slot (null bei Leerung/Placeholder).
-     */
-    public void onItemChange(Player player, int slot, ItemStack item) {
-        ItemStack ph = getPlaceholder(slot);
-        if (item == null || item.getType() == Material.AIR || (ph != null && item.isSimilar(ph))) {
-            activeItems.remove(slot);
-        } else {
-            activeItems.put(slot, item);
-        }
-    }
-
-    /**
-     * Wird aufgerufen, wenn das Inventar geschlossen wird.
-     * Gibt alle Items aus activeItems an den Spieler zurück.
-     *
-     * @param player Der Spieler, der das Inventar schließt.
-     */
-    public void handleClose(Player player) {
-        activeItems.values().forEach(item -> {
-            if (item != null && item.getType() != Material.AIR) {
-                Map<Integer, ItemStack> remaining = player.getInventory().addItem(item);
-                remaining.values().forEach(rest -> player.getWorld().dropItemNaturally(player.getLocation(), rest));
-            }
-        });
-        activeItems.clear();
-    }
-
-    /**
-     * Gibt das aktuell vom Spieler abgelegte Item in einem Slot zurück.
-     *
-     * @param slot Der Slot.
-     * @return Das gespeicherte ItemStack oder null.
-     */
-    protected ItemStack getActiveItem(int slot) {
-        return activeItems.get(slot);
-    }
-
-    /**
-     * Aktualisiert animierte Slots basierend auf einem Tick-Wert.
-     * Wird üblicherweise durch einen globalen Task aufgerufen.
-     *
-     * @param tick Aktueller Animations-Tick.
+     * Ticks animations.
+     * @param tick Current animation tick.
      */
     public void tickAnimations(long tick) {
         if (animatedSlots.isEmpty()) return;
@@ -449,50 +343,25 @@ public abstract class BaseGUI<T, C extends Enum<C>> implements InventoryHolder {
     }
 
     /**
-     * Prüft, ob ein Slot als interactable registriert ist.
-     *
-     * @param slot Slot-Index.
-     * @return true wenn registriert.
+     * Defines if a slot is interactable (e.g. for item input).
+     * @param slot Target slot.
+     * @return true if the slot was marked with setInteractable(slot, true).
      */
     public boolean isInteractableSlot(int slot) {
         return interactableSlots.contains(slot);
     }
 
     /**
-     * Prüft, ob ein Slot als placeholder registriert ist.
-     *
-     * @param slot Slot-Index.
-     * @return true wenn registriert.
+     * Returns whether the slot is a placeholder (display-only, no take/action).
      */
-    public boolean isPlaceholder(int slot) {
-        return placeholder.contains(slot);
+    public boolean isPlaceholderSlot(int slot) {
+        return placeholderSlots.contains(slot);
     }
 
     /**
-     * Prüft, ob ein Slot ein Prioritätsslot ist.
-     *
-     * @param slot Slot-Index.
-     * @return true wenn Priorität.
-     */
-    public boolean isPrioritySlot(int slot) {
-        return prioritySlots.contains(slot);
-    }
-
-    /**
-     * Liefert das Klon-Item (Platzhalter) für einen Slot zurück.
-     *
-     * @param slot Der Slot-Index.
-     * @return Der ursprüngliche ItemStack-Klon.
-     */
-    public ItemStack getPlaceholder(int slot) {
-        return slotPlaceholders.get(slot);
-    }
-
-    /**
-     * Rendert die aktuelle Seite der gefilterten Liste in den Content-Bereich der GUI.
-     *
-     * @param filter   Prädikat zur Filterung der {@link #allItems}.
-     * @param renderer Logik zum Rendern eines einzelnen Elements in einen Slot.
+     * Renders filtered content into the content area.
+     * @param filter Filter logic.
+     * @param renderer Logic for each item.
      */
     protected void renderPage(Predicate<T> filter, BiConsumer<T, Integer> renderer) {
         List<T> filteredItems = allItems.stream().filter(filter).toList();
@@ -506,63 +375,42 @@ public abstract class BaseGUI<T, C extends Enum<C>> implements InventoryHolder {
     }
 
     /**
-     * Füllt alle Slots außerhalb des Content-Bereichs mit einem Standard-Platzhalter.
-     *
-     * @param material Material für den Hintergrund.
+     * Fills slots outside the content area.
+     * @param material Filler material.
      */
     protected void fillBackground(@NotNull Material material) {
-        fillBackground(material, true);
+        fillBackground(material, false);
     }
 
     /**
-     * Füllt den Hintergrund der GUI mit einem Material.
-     *
-     * @param material         Das Material.
-     * @param fillInteractable Wenn false, werden interaktive Slots übersprungen.
+     * Fills slots outside the content area, optionally skipping ignored slots.
+     * @param material Filler material.
+     * @param skipIgnoredSlots If true, slots added via setIgnored() are not filled.
      */
-    protected void fillBackground(@NotNull Material material, boolean fillInteractable) {
-        ItemStack item = ItemBuilder.placeholder(material).build();
+    protected void fillBackground(@NotNull Material material, boolean skipIgnoredSlots) {
+        ItemStack item = new ItemBuilder(material).setName(Component.empty()).build();
         for (int i = 0; i < size; i++) {
-            if (!contentSlots.contains(i)) {
-                if (!fillInteractable && (isInteractableSlot(i) || isPlaceholder(i))) continue;
-                if (ignoredSlots.contains(i)) continue;
-                inventory.setItem(i, item);
-            }
+            if (contentSlots.contains(i)) continue;
+            if (skipIgnoredSlots && ignoredSlots.contains(i)) continue;
+            inventory.setItem(i, item);
         }
     }
 
     /**
-     * Füllt den gesamten Content-Bereich mit einem Material.
-     *
-     * @param material Material für den Content-Bereich.
+     * Fills the content area with a material.
+     * @param material Content material.
      */
     protected void fillContentArea(@NotNull Material material) {
-        fillContentArea(material, true);
+        ItemStack item = new ItemBuilder(material).setName(Component.empty()).build();
+        for (int slot : contentSlots) inventory.setItem(slot, item);
     }
 
     /**
-     * Füllt den Content-Bereich der GUI mit einem Material.
-     *
-     * @param material         Das Material.
-     * @param fillInteractable Wenn false, werden interaktive Slots übersprungen.
-     */
-    protected void fillContentArea(@NotNull Material material, boolean fillInteractable) {
-        ItemStack item = ItemBuilder.placeholder(material).build();
-        for (int slot : contentSlots) {
-            if (!fillInteractable && (isInteractableSlot(slot) || isPlaceholder(slot))) continue;
-            if (ignoredSlots.contains(slot)) continue;
-            inventory.setItem(slot, item);
-        }
-    }
-
-    /**
-     * Fügt automatisch Vor- und Zurück-Buttons für die Pagination hinzu.
-     * Buttons werden nur funktional, wenn eine entsprechende Seite existiert.
-     *
-     * @param prev Slot für die vorherige Seite.
-     * @param next Slot für die nächste Seite.
-     * @param p    Der Spieler, dem die GUI gehört.
-     * @param f    Der Filter, der für die Berechnung der Seitenanzahl genutzt werden soll.
+     * Adds pagination controls.
+     * @param prev Slot for back arrow.
+     * @param next Slot for forward arrow.
+     * @param p Target player.
+     * @param f Page filter.
      */
     protected void addPaginationButtons(int prev, int next, Player p, Predicate<T> f) {
         List<T> filtered = allItems.stream().filter(f).toList();
@@ -574,19 +422,17 @@ public abstract class BaseGUI<T, C extends Enum<C>> implements InventoryHolder {
     }
 
     /**
-     * Registriert eine Item-Animation für einen Slot.
-     *
-     * @param slot   Der Slot.
-     * @param frames Liste von Items, die nacheinander angezeigt werden.
+     * Registers animation frames for a slot.
+     * @param slot Target slot.
+     * @param frames Frame list.
      */
     protected void setAnimatedItem(int slot, List<ItemStack> frames) {
         animatedSlots.put(slot, frames);
     }
 
     /**
-     * Abstrakte Methode zum Aufbau des GUI-Layouts. Hier werden Buttons und Slots definiert.
-     *
-     * @param player Spieler, für den die GUI aufgebaut wird.
+     * GUI layout construction logic.
+     * @param player Target player.
      */
     public abstract void compose(Player player);
 

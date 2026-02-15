@@ -10,7 +10,6 @@ import org.bukkit.Sound;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
 
@@ -32,6 +31,8 @@ public class MessageHelper {
 
     /**
      * Sends a translated message to a sender.
+     * Empty strings or "none" in the config will result in no message being sent.
+     * Supports String and Component placeholders.
      * @param sender The recipient of the message.
      * @param key The translation key.
      * @param placeholders Key-Value pairs for placeholders.
@@ -54,15 +55,6 @@ public class MessageHelper {
     }
 
     /**
-     * Retrieves a translated component in "Locked" style (Red + Strikethrough).
-     * @param key The translation key.
-     * @return The formatted component.
-     */
-    public static Component getLocked(@NotNull String key) {
-        return lang.getLocked(key);
-    }
-
-    /**
      * Retrieves a translated list of components (e.g., for Item Lore).
      * @param key The translation key.
      * @param placeholders Key-Value pairs for placeholders.
@@ -73,16 +65,7 @@ public class MessageHelper {
     }
 
     /**
-     * Retrieves a translated list of components in "Locked" style.
-     * @param key The translation key.
-     * @return A list of formatted components.
-     */
-    public static List<Component> getLockedLore(@NotNull String key) {
-        return lang.getLockedList(key);
-    }
-
-    /**
-     * Sends a raw MiniMessage string directly.
+     * Sends a raw MiniMessage string directly without using the language file.
      * @param sender The recipient.
      * @param miniMessageText The raw text to parse.
      */
@@ -104,15 +87,6 @@ public class MessageHelper {
     }
 
     /**
-     * Sends a raw MiniMessage string to a player's action bar.
-     * @param player The player.
-     * @param miniMessageText The raw text.
-     */
-    public static void rawActionBar(@NotNull Player player, @NotNull String miniMessageText) {
-        player.sendActionBar(lang.parse(miniMessageText));
-    }
-
-    /**
      * Broadcasts a translated message to all online players.
      * @param key The translation key.
      * @param placeholders Key-Value pairs for placeholders.
@@ -126,6 +100,7 @@ public class MessageHelper {
 
     /**
      * Sends a formatted toggle message.
+     * Uses keys 'system.status_on', 'system.status_off' and 'system.toggle_format'.
      * @param sender The sender.
      * @param labelKey The key for the label.
      * @param active The status.
@@ -139,63 +114,110 @@ public class MessageHelper {
     }
 
     /**
-     * Sends a message to the console with a prefix.
-     * @param message The message (MiniMessage support).
+     * Sends a message to the console with a specific prefix.
+     * @param message The message to send.
      */
     public static void console(@NotNull String message) {
         Bukkit.getConsoleSender().sendMessage(lang.parse("<gray>[<red>Console</red>] <white>" + message));
     }
 
     /**
-     * Sends a debug message to the console if debug mode is enabled.
-     * @param message The debug message.
+     * Sends a message to the console with a specific prefix.
+     * @param message The message to send.
+     */
+    public static void console(@NotNull Component message) {
+        Bukkit.getConsoleSender().sendMessage(lang.parse("<gray>[<red>Console</red>] <white>").append(message));
+    }
+
+    /**
+     * Sends a debug message to the Console
+     * @param message
      */
     public static void debug(@NotNull String message) {
-        if (RedJuluLib.isDebug()) {
-            Bukkit.getConsoleSender().sendMessage(lang.parse("<dark_gray>[<aqua>DEBUG</aqua>] <gray>" + message));
-        }
+        if (RedJuluLib.isDebug()) Bukkit.getConsoleSender().sendMessage(lang.parse("<dark_gray>[<aqua>DEBUG</aqua>] <gray>" + message));
     }
 
     /**
-     * Gets the raw string value of a key.
-     * @param key The key.
-     * @return The raw string or the key itself.
+     * Sends a debug message to the Console
+     * @param message
      */
+    public static void debug(@NotNull Component message) {
+        if (RedJuluLib.isDebug()) Bukkit.getConsoleSender().sendMessage(lang.parse("<dark_gray>[<aqua>DEBUG</aqua>] <gray>" + message));
+    }
+
+    /**
+     * Returns the raw String
+     * @param key
+     * @return String
+     */
+
     public static String getRaw(@NotNull String key) {
-        String raw = lang.getRaw(key);
-        return raw != null ? raw : key;
+        return lang.getRaw(key);
     }
 
     /**
-     * Translates MiniMessage to Legacy Section (§).
+     * Translates MiniMessage to Legacy
+     * @param mmString
+     * @return
      */
-    public static String translateMMToLegacy(@NotNull String mmString) {
-        return LegacyComponentSerializer.legacySection().serialize(lang.parse(mmString));
+    public static String translateMMToLegacy(String mmString) {
+        var component = MiniMessage.miniMessage().deserialize(mmString);
+        return LegacyComponentSerializer.legacySection().serialize(component);
     }
 
     /**
-     * Translates Legacy Section (§) to MiniMessage.
+     * Sends a Text in the Actionbar
+     * @param player
+     * @param key
+     * @param replacements
      */
-    public static String translateLegacyToMM(@NotNull String legacyString) {
-        var component = LegacyComponentSerializer.legacySection().deserialize(legacyString);
-        return MiniMessage.miniMessage().serialize(component);
+    public static void sendActionbar(Player player, String key, String... replacements) {
+        String message = getRaw(key);
+        for (int i = 0; i < replacements.length; i += 2) {
+            message = message.replace("<" + replacements[i] + ">", replacements[i + 1]);
+        }
+        player.sendActionBar(MiniMessage.miniMessage().deserialize(message));
+    }
+
+    /**
+     * Sends a raw Actionbar
+     * @param player
+     * @param message
+     */
+    public static void sendRawActionbar(Player player, String message) {
+        player.sendActionBar(MiniMessage.miniMessage().deserialize(message));
     }
 
     /**
      * Plays a sound for a player.
+     * @param player The player.
+     * @param sound The sound.
+     * @param pitch The pitch.
      */
     public static void playSound(@NotNull Player player, @NotNull Sound sound, float pitch) {
         player.playSound(player.getLocation(), sound, 0.5f, pitch);
     }
 
+    /**
+     * Plays a success sound.
+     * @param player The player.
+     */
     public static void playSuccess(@NotNull Player player) {
         playSound(player, Sound.BLOCK_NOTE_BLOCK_CHIME, 1.2f);
     }
 
+    /**
+     * Plays an error sound.
+     * @param player The player.
+     */
     public static void playError(@NotNull Player player) {
         playSound(player, Sound.ENTITY_VILLAGER_NO, 1.0f);
     }
 
+    /**
+     * Plays a generic click sound.
+     * @param player The player.
+     */
     public static void playClick(@NotNull Player player) {
         playSound(player, Sound.UI_BUTTON_CLICK, 1.0f);
     }

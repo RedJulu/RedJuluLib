@@ -17,7 +17,7 @@ public class RedJuluLib {
 
     private static JavaPlugin plugin;
     private static LanguageService lang;
-    private static boolean debug = true;
+    private static boolean debug = false;
     private static boolean initialized = false;
 
     /**

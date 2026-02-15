@@ -22,20 +22,15 @@ import org.bukkit.persistence.PersistentDataType;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.lang.reflect.Method;
 import java.util.*;
 import java.util.function.Consumer;
 
 /**
- * Ultimativer ItemBuilder für Paper 1.21.1+.
- * Unterstützt moderne Data Components, ItemModels, persistente Metadaten,
- * Generic-Items (ID), Bound-Items (Besitzer) und Lore-Anpassungen.
+ * Ultimativer ItemBuilder für Paper 1.21.1.
+ * Unterstützt moderne Data Components, ItemModels und persistente Metadaten.
  */
 public class ItemBuilder {
-
-    /** PDC-Key für die Generic-Item-ID. */
-    public static final String PDC_GENERIC_ID = "generic_id";
-    /** PDC-Key für den Besitzer eines Bound-Items. */
-    public static final String PDC_BOUND_OWNER = "bound_owner";
 
     private final ItemStack itemStack;
     private final ItemMeta itemMeta;
@@ -69,100 +64,91 @@ public class ItemBuilder {
     }
 
     /**
-     * Setzt den Anzeigenamen via MiniMessage-String.
-     * Deaktiviert standardmäßig das Minecraft-Kursiv.
-     * @param name Der Name als String.
+     * Erstellt einen ItemBuilder für einen GUI-Platzhalter (leerer Name, weiteres per Builder anpassbar).
+     * @param material Das Material des Platzhalters.
+     * @return Ein ItemBuilder mit leerem Anzeigenamen.
+     */
+    public static @NotNull ItemBuilder placeholder(@NotNull Material material) {
+        return new ItemBuilder(material).setName(Component.empty());
+    }
+
+    /**
+     * Setzt den Anzeigenamen des Items.
+     * @param name Der Name als String (MiniMessage Support). Bei null wird der Name zurückgesetzt.
      * @return Der aktuelle Builder.
      */
     public ItemBuilder setName(@Nullable String name) {
-        if (name != null) {
-            itemMeta.displayName(mm.deserialize(name).decoration(TextDecoration.ITALIC, TextDecoration.State.FALSE));
+        if (name == null) {
+            itemMeta.displayName(null);
+        } else {
+            itemMeta.displayName(mm.deserialize(name).decoration(TextDecoration.ITALIC, false));
         }
         return this;
     }
 
     /**
-     * Setzt den Anzeigenamen via Adventure Component.
-     * Deaktiviert standardmäßig das Minecraft-Kursiv.
-     * @param component Die Component.
+     * Setzt den Anzeigenamen als Adventure Component.
+     * @param component Die Component. Bei null wird der Name zurückgesetzt.
      * @return Der aktuelle Builder.
      */
     public ItemBuilder setName(@Nullable Component component) {
-        if (component != null) {
-            itemMeta.displayName(component.decoration(TextDecoration.ITALIC, TextDecoration.State.FALSE));
+        if (component == null) {
+            itemMeta.displayName(null);
+        } else {
+            itemMeta.displayName(component.decoration(TextDecoration.ITALIC, false));
         }
         return this;
     }
 
     /**
-     * Setzt die Lore via MiniMessage-Strings.
-     * @param lore Die Lore-Zeilen als Strings.
+     * Setzt die Lore (Beschreibung) des Items.
+     * @param lore Die Lore-Zeilen (MiniMessage Support). Bei leerem Array wird die Lore gelöscht.
      * @return Der aktuelle Builder.
      */
     public ItemBuilder setLore(@NotNull String... lore) {
-        itemMeta.lore(Arrays.stream(lore)
-                .map(line -> mm.deserialize(line).decoration(TextDecoration.ITALIC, TextDecoration.State.FALSE))
-                .toList());
-        return this;
-    }
-
-    /**
-     * Setzt die Lore via Adventure Components.
-     * @param lore Die Lore-Zeilen als Components.
-     * @return Der aktuelle Builder.
-     */
-    public ItemBuilder setLore(@NotNull Component... lore) {
-        itemMeta.lore(Arrays.stream(lore)
-                .map(line -> line.decoration(TextDecoration.ITALIC, TextDecoration.State.FALSE))
-                .toList());
-        return this;
-    }
-
-    /**
-     * Setzt die Lore via einer Liste von Components.
-     * @param lore Die Liste der Components.
-     * @return Der aktuelle Builder.
-     */
-    public ItemBuilder setLore(@Nullable List<Component> lore) {
-        if (lore != null) {
-            itemMeta.lore(lore.stream()
-                    .map(c -> c.decoration(TextDecoration.ITALIC, TextDecoration.State.FALSE))
+        if (lore.length == 0) {
+            itemMeta.lore(null);
+        } else {
+            itemMeta.lore(Arrays.stream(lore)
+                    .map(line -> mm.deserialize(line).decoration(TextDecoration.ITALIC, false))
                     .toList());
         }
         return this;
     }
 
     /**
-     * Hängt MiniMessage-Zeilen an die bestehende Lore an.
-     * @param lines Zusätzliche Zeilen.
+     * Setzt die Lore als Liste von Components.
+     * @param lore Die Liste der Components. Bei null oder leerer Liste wird die Lore gelöscht.
      * @return Der aktuelle Builder.
      */
-    public ItemBuilder appendLore(@NotNull String... lines) {
-        List<Component> current = itemMeta.hasLore() && itemMeta.lore() != null ? new ArrayList<>(itemMeta.lore()) : new ArrayList<>();
-        for (String line : lines) {
-            current.add(mm.deserialize(line).decoration(TextDecoration.ITALIC, TextDecoration.State.FALSE));
+    public ItemBuilder setLore(@Nullable List<Component> lore) {
+        if (lore == null || lore.isEmpty()) {
+            itemMeta.lore(null);
+        } else {
+            itemMeta.lore(lore.stream().map(c -> c.decoration(TextDecoration.ITALIC, false)).toList());
         }
-        itemMeta.lore(current);
         return this;
     }
 
     /**
-     * Hängt Components an die bestehende Lore an.
-     * @param lines Zusätzliche Components.
+     * Setzt die Lore unter Verwendung von MiniMessage.
+     * @param lore Die Lore-Zeilen als MiniMessage-Strings. Bei leerem Array wird die Lore gelöscht.
      * @return Der aktuelle Builder.
      */
-    public ItemBuilder appendLore(@NotNull Component... lines) {
-        List<Component> current = itemMeta.hasLore() && itemMeta.lore() != null ? new ArrayList<>(itemMeta.lore()) : new ArrayList<>();
-        for (Component line : lines) {
-            current.add(line.decoration(TextDecoration.ITALIC, TextDecoration.State.FALSE));
+    public ItemBuilder setMiniMessageLore(@NotNull String... lore) {
+        if (lore.length == 0) {
+            itemMeta.lore(null);
+        } else {
+            itemMeta.lore(Arrays.stream(lore)
+                    .map(line -> line.isEmpty() ? Component.empty() : mm.deserialize(line).decoration(TextDecoration.ITALIC, false))
+                    .toList());
         }
-        itemMeta.lore(current);
         return this;
     }
 
     /**
-     * Setzt die Stapelgröße des Items.
-     * @param amount Menge.
+     * Setzt die Menge des ItemStacks.
+     * @param amount Die Menge.
      * @return Der aktuelle Builder.
      */
     public ItemBuilder setAmount(int amount) {
@@ -171,8 +157,8 @@ public class ItemBuilder {
     }
 
     /**
-     * Setzt die CustomModelData.
-     * @param data ID.
+     * Setzt die CustomModelData (Legacy Methode).
+     * @param data Die ID.
      * @return Der aktuelle Builder.
      */
     public ItemBuilder setCustomModelData(@Nullable Integer data) {
@@ -181,8 +167,8 @@ public class ItemBuilder {
     }
 
     /**
-     * Setzt das ItemModel (Minecraft 1.21+).
-     * @param key NamespacedKey des Models.
+     * Setzt das ItemModel (Moderne 1.21 Methode).
+     * @param key Der NamespacedKey des Models.
      * @return Der aktuelle Builder.
      */
     public ItemBuilder setItemModel(@Nullable NamespacedKey key) {
@@ -192,12 +178,36 @@ public class ItemBuilder {
 
     /**
      * Setzt das ItemModel via Namespace und Key.
-     * @param namespace Namespace.
-     * @param key Key.
+     * @param namespace Der Namespace.
+     * @param key Der Key.
      * @return Der aktuelle Builder.
      */
     public ItemBuilder setItemModel(@NotNull String namespace, @NotNull String key) {
         return setItemModel(new NamespacedKey(namespace, key));
+    }
+
+    /**
+     * Markiert das Item als nicht umbenennbar im Amboss.
+     * @param unrenamable True für Blockierung.
+     * @return Der aktuelle Builder.
+     */
+    public ItemBuilder setUnrenamable(boolean unrenamable) {
+        if (unrenamable) {
+            pdc(new NamespacedKey(RedJuluLib.getPlugin(), "unrenamable"), PersistentDataType.BOOLEAN, true);
+        }
+        return this;
+    }
+
+    /**
+     * Markiert das Item als nicht verzauberbar.
+     * @param unenchantable True für Blockierung.
+     * @return Der aktuelle Builder.
+     */
+    public ItemBuilder setUnenchantable(boolean unenchantable) {
+        if (unenchantable) {
+            pdc(new NamespacedKey(RedJuluLib.getPlugin(), "unenchantable"), PersistentDataType.BOOLEAN, true);
+        }
+        return this;
     }
 
     /**
@@ -211,8 +221,8 @@ public class ItemBuilder {
     }
 
     /**
-     * Erzwingt oder entfernt das Verzauberungs-Leuchten.
-     * @param override True für Leuchten.
+     * Erzwingt oder entfernt das Verzauberungs-Leuchten (Glint).
+     * @param override True für dauerhaftes Leuchten.
      * @return Der aktuelle Builder.
      */
     public ItemBuilder setEnchantmentGlintOverride(boolean override) {
@@ -231,8 +241,8 @@ public class ItemBuilder {
     }
 
     /**
-     * Setzt die maximale Stack-Größe.
-     * @param size Größe (1-99).
+     * Setzt das maximale Stack-Limit des Items.
+     * @param size Das Limit (1-99).
      * @return Der aktuelle Builder.
      */
     public ItemBuilder setMaxStackSize(@Nullable Integer size) {
@@ -242,7 +252,7 @@ public class ItemBuilder {
 
     /**
      * Setzt die Seltenheit (Farbe des Namens).
-     * @param rarity Seltenheitsgrad.
+     * @param rarity Die Rarity.
      * @return Der aktuelle Builder.
      */
     public ItemBuilder setRarity(@NotNull ItemRarity rarity) {
@@ -261,9 +271,20 @@ public class ItemBuilder {
     }
 
     /**
+     * Versteckt die speziellen 1.21 Zusatz-Infos (wie Smithing Template Texte,
+     * Potion-Effekte, etc.), während Name und Lore sichtbar bleiben.
+     * @return Der aktuelle Builder.
+     */
+    public ItemBuilder hideAdditionalInfo() {
+        itemMeta.addItemFlags(ItemFlag.HIDE_ADDITIONAL_TOOLTIP);
+        return this;
+    }
+
+
+    /**
      * Fügt eine Verzauberung hinzu.
-     * @param enchant Verzauberung.
-     * @param level Level.
+     * @param enchant Die Verzauberung.
+     * @param level Das Level.
      * @param ignoreRestriction Ob Limits ignoriert werden.
      * @return Der aktuelle Builder.
      */
@@ -283,22 +304,13 @@ public class ItemBuilder {
     }
 
     /**
-     * Versteckt alle Standard-Informationen (Enchants, Attribute, etc.).
-     * @return Der aktuelle Builder.
-     */
-    public ItemBuilder hideAll() {
-        itemMeta.addItemFlags(ItemFlag.values());
-        return this;
-    }
-
-    /**
      * Speichert persistente Daten auf dem Item.
-     * @param key Key.
-     * @param type Datentyp.
-     * @param value Wert.
+     * @param key Der Key.
+     * @param type Der Datentyp.
+     * @param value Der Wert.
      * @return Der aktuelle Builder.
      */
-    public <T, Z> ItemBuilder pdc(@NotNull NamespacedKey key, @NotNull PersistentDataType<T, Z> type, @NotNull Z value) {
+    public <T, Z> ItemBuilder setPersistentData(@NotNull NamespacedKey key, @NotNull PersistentDataType<T, Z> type, @NotNull Z value) {
         itemMeta.getPersistentDataContainer().set(key, type, value);
         return this;
     }
@@ -317,7 +329,7 @@ public class ItemBuilder {
 
     /**
      * Setzt den Kopf-Besitzer via UUID.
-     * @param uuid UUID des Spielers.
+     * @param uuid Die UUID des Spielers.
      * @return Der aktuelle Builder.
      */
     public ItemBuilder setSkullOwner(@NotNull UUID uuid) {
@@ -330,7 +342,7 @@ public class ItemBuilder {
 
     /**
      * Setzt eine Custom-Textur für einen Kopf via Base64.
-     * @param base64 Textur-String.
+     * @param base64 Der Textur-String.
      * @return Der aktuelle Builder.
      */
     public ItemBuilder setSkullTexture(@NotNull String base64) {
@@ -343,7 +355,7 @@ public class ItemBuilder {
     }
 
     /**
-     * Bearbeitet die Food-Komponente (Minecraft 1.21+).
+     * Bearbeitet die Food-Komponente (1.21).
      * @param consumer Zugriff auf die Komponente.
      * @return Der aktuelle Builder.
      */
@@ -355,7 +367,7 @@ public class ItemBuilder {
     }
 
     /**
-     * Bearbeitet die Tool-Komponente (Minecraft 1.21+).
+     * Bearbeitet die Tool-Komponente (1.21).
      * @param consumer Zugriff auf die Komponente.
      * @return Der aktuelle Builder.
      */
@@ -368,8 +380,8 @@ public class ItemBuilder {
 
     /**
      * Fügt einen Attribut-Modifier hinzu.
-     * @param attribute Attribut.
-     * @param modifier Modifier.
+     * @param attribute Das Attribut.
+     * @param modifier Der Modifier.
      * @return Der aktuelle Builder.
      */
     public ItemBuilder addAttribute(@NotNull Attribute attribute, @NotNull AttributeModifier modifier) {
@@ -378,8 +390,8 @@ public class ItemBuilder {
     }
 
     /**
-     * Ermöglicht es, das Item in einen bestimmten Slot auszurüsten.
-     * @param slot EquipmentSlot.
+     * Ermöglicht es, das Item in einen bestimmten Slot auszurüsten (1.21.1).
+     * @param slot Der EquipmentSlot.
      * @return Der aktuelle Builder.
      */
     public ItemBuilder setEquippable(EquipmentSlot slot) {
@@ -390,40 +402,15 @@ public class ItemBuilder {
     }
 
     /**
-     * Setzt die Generic-Item-ID (PDC).
-     * @param id Eindeutige ID.
+     * Speichert persistente Daten auf dem Item unter Verwendung des Plugin-Keys.
+     * @param key Der Key.
+     * @param type Der Datentyp.
+     * @param value Der Wert.
      * @return Der aktuelle Builder.
      */
-    public ItemBuilder setGenericId(@NotNull String id) {
-        return pdc(genericIdKey(), PersistentDataType.STRING, id);
-    }
-
-    /**
-     * Setzt den Besitzer eines Bound-Items (PDC).
-     * @param owner UUID des Besitzers.
-     * @return Der aktuelle Builder.
-     */
-    public ItemBuilder setBoundOwner(@NotNull UUID owner) {
-        return pdc(boundOwnerKey(), PersistentDataType.STRING, owner.toString());
-    }
-
-    /** @return NamespacedKey für die Generic-ID. */
-    public static @NotNull NamespacedKey genericIdKey() {
-        return new NamespacedKey(RedJuluLib.getPlugin(), PDC_GENERIC_ID);
-    }
-
-    /** @return NamespacedKey für den Bound-Besitzer. */
-    public static @NotNull NamespacedKey boundOwnerKey() {
-        return new NamespacedKey(RedJuluLib.getPlugin(), PDC_BOUND_OWNER);
-    }
-
-    /**
-     * Erstellt einen Platzhalter mit leerem Namen.
-     * @param material Material.
-     * @return Builder mit leerem Namen.
-     */
-    public static @NotNull ItemBuilder placeholder(@NotNull Material material) {
-        return new ItemBuilder(material).setName(Component.empty());
+    public <T, Z> ItemBuilder pdc(@NotNull NamespacedKey key, @NotNull PersistentDataType<T, Z> type, @NotNull Z value) {
+        itemMeta.getPersistentDataContainer().set(key, type, value);
+        return this;
     }
 
     /**
