@@ -10,6 +10,7 @@ import org.bukkit.Sound;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
 
@@ -44,6 +45,7 @@ public class MessageHelper {
         }
     }
 
+    @Deprecated(since = "1.3", forRemoval = true)
     /**
      * Retrieves a translated component.
      * @param key The translation key.
@@ -54,6 +56,7 @@ public class MessageHelper {
         return lang.get(key, placeholders);
     }
 
+    @Deprecated(since = "1.3", forRemoval = true)
     /**
      * Retrieves a translated list of components (e.g., for Item Lore).
      * @param key The translation key.
@@ -64,6 +67,7 @@ public class MessageHelper {
         return lang.getList(key, placeholders);
     }
 
+    @Deprecated(since = "1.3", forRemoval = true)
     /**
      * Sends a raw MiniMessage string directly without using the language file.
      * @param sender The recipient.
@@ -99,15 +103,40 @@ public class MessageHelper {
     }
 
     /**
+     * Broadcasts a translated List to all online players.
+     * @param key
+     * @param placeholders
+     */
+    public static void broadcastList(@NotNull String key, Object... placeholders) {
+        List<Component> msg = lang.getList(key, placeholders);
+        if (msg != null && !msg.isEmpty())
+        msg.forEach(Bukkit::broadcast);
+    }
+
+    /**
      * Sends a formatted toggle message.
      * Uses keys 'system.status_on', 'system.status_off' and 'system.toggle_format'.
      * @param sender The sender.
      * @param labelKey The key for the label.
      * @param active The status.
      */
-    public static void sendToggle(@NotNull CommandSender sender, @NotNull String labelKey, boolean active) {
+    public static void sendToggle(@NotNull Player sender, @NotNull String labelKey, boolean active) {
         String statusKey = active ? "system.status_on" : "system.status_off";
         send(sender, "system.toggle_format",
+                "label", lang.getRaw(labelKey),
+                "status", lang.getRaw(statusKey)
+        );
+    }
+
+    /**
+     * Sends a formatted toggle message in Actionbar.
+     * Uses keys 'system.status_on', 'system.status_off' and 'system.toggle_format'.
+     * @param labelKey The key for the label.
+     * @param active The status.
+     */
+    public static void sendActionbarToggle(@NotNull Player sender, @NotNull String labelKey, boolean active) {
+        String statusKey = active ? "system.status_on" : "system.status_off";
+        sendActionbar(sender, "system.toggle_format",
                 "label", lang.getRaw(labelKey),
                 "status", lang.getRaw(statusKey)
         );
@@ -192,10 +221,11 @@ public class MessageHelper {
      * Plays a sound for a player.
      * @param player The player.
      * @param sound The sound.
+     * @param volume The Volume.
      * @param pitch The pitch.
      */
-    public static void playSound(@NotNull Player player, @NotNull Sound sound, float pitch) {
-        player.playSound(player.getLocation(), sound, 0.5f, pitch);
+    public static void playSound(@NotNull Player player, @NotNull Sound sound, @Nullable Float volume, @Nullable Float pitch) {
+        player.playSound(player.getLocation(), sound, (volume == null ? 0.5f : volume), (pitch == null ? 1.0f : pitch));
     }
 
     /**
@@ -203,7 +233,7 @@ public class MessageHelper {
      * @param player The player.
      */
     public static void playSuccess(@NotNull Player player) {
-        playSound(player, Sound.BLOCK_NOTE_BLOCK_CHIME, 1.2f);
+        playSound(player, Sound.BLOCK_NOTE_BLOCK_CHIME, null, 1.2f);
     }
 
     /**
@@ -211,7 +241,7 @@ public class MessageHelper {
      * @param player The player.
      */
     public static void playError(@NotNull Player player) {
-        playSound(player, Sound.ENTITY_VILLAGER_NO, 1.0f);
+        playSound(player, Sound.ENTITY_VILLAGER_NO, null, 1.0f);
     }
 
     /**
@@ -219,6 +249,6 @@ public class MessageHelper {
      * @param player The player.
      */
     public static void playClick(@NotNull Player player) {
-        playSound(player, Sound.UI_BUTTON_CLICK, 1.0f);
+        playSound(player, Sound.UI_BUTTON_CLICK, null, 1.0f);
     }
 }

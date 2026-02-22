@@ -34,6 +34,7 @@ public class DialogBuilder {
     private DialogType type = null;
     private boolean canCloseWithEscape = true;
     private Component externalTitle;
+    private DialogBase.DialogAfterAction afterAction;
 
     public DialogBuilder() {
     }
@@ -144,6 +145,11 @@ public class DialogBuilder {
         return this;
     }
 
+    public DialogBuilder afterAction(DialogBase.DialogAfterAction afterAction) {
+        this.afterAction = afterAction;
+        return this;
+    }
+
     public Dialog build() {
         DialogBase.Builder baseBuilder = DialogBase.builder(title)
                 .canCloseWithEscape(canCloseWithEscape)
@@ -152,6 +158,10 @@ public class DialogBuilder {
 
         if (externalTitle != null) {
             baseBuilder.externalTitle(externalTitle);
+        }
+
+        if (afterAction != null) {
+            baseBuilder.afterAction(afterAction);
         }
 
         DialogType finalType = this.type;

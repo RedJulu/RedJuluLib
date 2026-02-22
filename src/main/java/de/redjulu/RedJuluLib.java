@@ -1,6 +1,7 @@
 package de.redjulu;
 
 import de.redjulu.lib.MessageHelper;
+import de.redjulu.lib.bossbar.BossbarManager;
 import de.redjulu.lib.gui.GUIAnimationTask;
 import de.redjulu.lib.gui.GUIListener;
 import de.redjulu.lib.item.BoundItem;
@@ -17,6 +18,7 @@ public class RedJuluLib {
 
     private static JavaPlugin plugin;
     private static LanguageService lang;
+    private static BossbarManager bossbarManager;
     private static boolean debug = false;
     private static boolean initialized = false;
 
@@ -31,6 +33,7 @@ public class RedJuluLib {
 
         plugin = pluginInstance;
         lang = new LanguageService(plugin, selectedLanguage);
+        bossbarManager = new BossbarManager(plugin);
 
         Bukkit.getPluginManager().registerEvents(new GUIListener(), plugin);
         Bukkit.getPluginManager().registerEvents(new BoundItem.BoundListener(), plugin);
@@ -57,6 +60,15 @@ public class RedJuluLib {
      */
     public static LanguageService getLang() {
         return lang;
+    }
+
+    /**
+     * Returns the registered BossbarManager instance.
+     *
+     * @return The BossbarManager instance.
+     */
+    public static BossbarManager getBossbarManager() {
+        return bossbarManager;
     }
 
     /**

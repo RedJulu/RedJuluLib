@@ -82,6 +82,14 @@ public class LanguageService {
         return render(template, placeholders);
     }
 
+    public String getOrDefault(String key, String defaultValue) {
+        Object val = cache.get(key);
+        if (val == null) return defaultValue;
+        String str = String.valueOf(val);
+        if (str.isEmpty() || str.equalsIgnoreCase("none")) return defaultValue;
+        return str;
+    }
+
     /**
      * Holt einen Text, entfernt alle vorhandenen Tags und forced ihn auf Rot + Durchgestrichen.
      * @param key The language key.
@@ -155,6 +163,11 @@ public class LanguageService {
                 }
             }
         }
+
+        template = template
+                .replaceAll("\\{(\\w+)}", "<$1>")
+                .replaceAll("\\[(\\w+)]", "<$1>");
+
         return mm.deserialize(template, builder.build());
     }
 
