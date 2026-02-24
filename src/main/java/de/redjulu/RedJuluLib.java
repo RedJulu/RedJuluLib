@@ -2,6 +2,8 @@ package de.redjulu;
 
 import de.redjulu.lib.MessageHelper;
 import de.redjulu.lib.bossbar.BossbarManager;
+import de.redjulu.lib.filestore.FilestoreConfigLoader;
+import de.redjulu.lib.filestore.FilestoreManager;
 import de.redjulu.lib.gui.GUIAnimationTask;
 import de.redjulu.lib.gui.GUIListener;
 import de.redjulu.lib.item.BoundItem;
@@ -19,6 +21,7 @@ public class RedJuluLib {
     private static JavaPlugin plugin;
     private static LanguageService lang;
     private static BossbarManager bossbarManager;
+    private static FilestoreManager filestoreManager;
     private static boolean debug = false;
     private static boolean initialized = false;
 
@@ -40,6 +43,8 @@ public class RedJuluLib {
 
         new GUIAnimationTask(plugin).start(10L);
         MessageHelper.init(lang);
+
+        filestoreManager = FilestoreConfigLoader.createManager(plugin);
 
         initialized = true;
     }
@@ -72,6 +77,17 @@ public class RedJuluLib {
     }
 
     /**
+     * Returns the FilestoreManager (initialized in init).
+     */
+    @NotNull
+    public static FilestoreManager getFilestoreManager() {
+        if (filestoreManager == null) {
+            throw new IllegalStateException("RedJuluLib.init() must be called first.");
+        }
+        return filestoreManager;
+    }
+
+    /**
      * Checks if debug mode is enabled.
      *
      * @return True if debug is active.
@@ -87,5 +103,15 @@ public class RedJuluLib {
      */
     public static void setDebug(boolean enabled) {
         debug = enabled;
+    }
+
+    /**
+     * Call from your plugin's onDisable().
+     */
+    public static void shutdown() {
+        if (filestoreManager != null) {
+            filestoreManager.shutdown();
+            filestoreManager = null;
+        }
     }
 }
